@@ -114,6 +114,18 @@ oter_id house(int dir)
  }
 }
 
+oter_id multistory_house(int dir)
+{
+	if (dir < 0) dir += 4;
+ switch (dir) {
+  case 0:  return ot_tower_north;
+  case 1:  return ot_tower_east;
+  case 2:  return ot_tower_south;
+  case 3:  return ot_tower_west;
+  default: debugmsg("Bad rotation of tower."); return ot_null;
+ }
+}
+
 // *** BEGIN overmap FUNCTIONS ***
 
 overmap::overmap()
@@ -152,7 +164,12 @@ overmap::overmap(game *g, int x, int y, int z)
  if (num_ter_types > 256)
   debugmsg("More than 256 oterid!  Saving won't work!");
  nullret = ot_null;
- open(g, x, y, z);
+
+ // TODO: Hack for z-levels, other game types appear in the same range,
+ //       we are only allowed (TUTORIAL_Z - 1) above ground levels
+ int tmpz = (z < 0 || z >= TUTORIAL_Z - 1) ? z : 0;
+ open(g, x, y, tmpz);
+ posz = z;
 }
 
 overmap::~overmap()
@@ -1395,6 +1412,8 @@ void overmap::place_cities()
 
 void overmap::put_buildings(int x, int y, int dir, city town)
 {
+	// TODO: multistory buildings in inner city only?
+	// TODO: remove debuging mode of every house a tower block
  int ychange = dir % 2, xchange = (dir + 1) % 2;
  for (int i = -1; i <= 1; i += 2) {
   if ((ter(x+i*xchange, y+i*ychange) == ot_field) && !one_in(STREETCHANCE)) {
@@ -1404,7 +1423,8 @@ void overmap::put_buildings(int x, int y, int dir, city town)
     if (rng(0, 99) > 130 * dist(x, y, town.x, town.y) / town.s)
      ter(x+i*xchange, y+i*ychange) = ot_park;
     else
-     ter(x+i*xchange, y+i*ychange) = house(((dir%2)-i)%4);
+     // ter(x+i*xchange, y+i*ychange) = house(((dir%2)-i)%4);
+     ter(x+i*xchange, y+i*ychange) = multistory_house(((dir%2)-i)%4);
    }
   }
  }

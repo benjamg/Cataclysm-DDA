@@ -7200,6 +7200,12 @@ void game::plmove(int x, int y)
  if (m.move_cost(x, y) > 0) { // move_cost() of 0 = impassible (e.g. a wall)
   if (u.underwater)
    u.underwater = false;
+
+  // Cheap z-level hack, fall to ground level, can't do walkways yet :(
+  if (m.ter(x, y) == t_hole && m.ter(x, y, 0) != t_hole)
+  	if (!query_yn("Really jump down %d stories?", cur_om.posz))
+  		return;
+
   dpart = veh ? veh->part_with_feature (vpart, vpf_seat) : -1;
   bool can_board = dpart >= 0 && veh->parts[dpart].items.size() == 0 &&
       !veh->parts[dpart].has_flag(vehicle_part::passenger_flag);
@@ -7306,6 +7312,13 @@ void game::plmove(int x, int y)
    update_map(x, y);
   u.posx = x;
   u.posy = y;
+
+  // Cheap z-level hack part 2, vertial drop
+  if (m.ter(x, y) == t_hole && m.ter(x, y, 0) != t_hole) {
+  	vertical_move(-cur_om.posz, true);
+  	return;
+  }
+
   if (m.tr_at(x, y) != tr_null) { // We stepped on a trap!
    trap* tr = traps[m.tr_at(x, y)];
    if (!u.avoid_trap(tr)) {
@@ -7740,6 +7753,7 @@ void game::vertical_move(int movez, bool force)
    add_msg("You flap your wings and flutter down gracefully.");
   else {
    int dam = int((u.str_max / 4) + rng(5, 10)) * rng(1, 3);//The bigger they are
+   dam *= std::max<int>(movez, 5); // falling a long way is deadly
    dam -= rng(u.dodge(this), u.dodge(this) * 3);
    if (dam <= 0)
     add_msg("You fall expertly and take no damage.");

@@ -295,6 +295,14 @@ void mapbuffer::load()
   submaps[ tripoint(locx, locy, locz) ] = sm;
   num_loaded++;
  }
+
+ // update above lists - this is overly ugly, must rework
+ for (it = submaps.begin(); it != submaps.end(); it++) {
+ 	tripoint p = it->first;
+ 	while(++p.z && (submaps.end() != submaps.find(p))) {
+ 		it->second->above.push_back(submaps[p]);
+ 	}
+ }
  fin.close();
 }
 

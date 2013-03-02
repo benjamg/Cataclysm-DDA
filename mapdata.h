@@ -798,6 +798,8 @@ struct submap {
  std::vector<spawn_point> spawns;
  std::vector<vehicle*> vehicles;
  computer comp;
+
+ std::vector<submap*> above;
 };
 
 std::ostream & operator<<(std::ostream &, const submap *);

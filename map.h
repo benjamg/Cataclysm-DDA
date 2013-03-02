@@ -53,7 +53,7 @@ class map
              const bool low_light = false, const bool bright_level = false);
 
 // File I/O
- virtual void save(overmap *om, unsigned const int turn, const int x, const int y);
+ virtual void save(overmap *om, unsigned const int turn, const int x, const int z);
  virtual void load(game *g, const int wx, const int wy, const bool update_vehicles = true);
  void shift(game *g, const int wx, const int wy, const int x, const int y);
  void spawn_monsters(game *g);
@@ -104,6 +104,7 @@ class map
 
 // Terrain
  ter_id& ter(const int x, const int y); // Terrain at coord (x, y); {x|y}=(0, SEE{X|Y}*3]
+ ter_id& ter(const int x, const int y, const int z);
  bool is_indoor(const int x, const int y); // Check if current ter is indoors
  std::string tername(const int x, const int y); // Name of terrain at (x, y)
  std::string features(const int x, const int y); // Words relevant to terrain (sharp, etc)
@@ -191,9 +192,9 @@ class map
  bool veh_exists_at [SEEX * MAPSIZE][SEEY * MAPSIZE];
 
 protected:
- void saven(overmap *om, unsigned const int turn, const int x, const int y,
+ void saven(overmap *om, unsigned const int turn, const int x, const int y, const int z,
             const int gridx, const int gridy);
- bool loadn(game *g, const int x, const int y, const int gridx, const int gridy,
+ bool loadn(game *g, const int x, const int y, const int z, const int gridx, const int gridy,
             const  bool update_vehicles = true);
  void copy_grid(const int to, const int from);
  void draw_map(oter_id terrain_type, oter_id t_north, oter_id t_east,
@@ -220,7 +221,11 @@ protected:
  bool veh_in_active_range;
 
 private:
+ // TODO: hacky default z-level, eventually replace all the x,y functions with x,y,z ones
+ int cheap_z;
  submap* grid[MAPSIZE * MAPSIZE];
+
+ void generate_vertical(int levs, int t, int l, int b, int r);
 };
 
 class tinymap : public map

@@ -207,7 +207,7 @@ void map::generate(game *g, overmap *om, int x, int y, int turn)
    dbg(D_INFO) << grid[i+j];
 
    if (i <= 1 && j <= 1)
-    saven(om, turn, x, y, i, j);
+    saven(om, turn, x, y, om->posz, i, j);
    else
     delete grid[i + j * my_MAPSIZE];
   }
@@ -232,7 +232,7 @@ void map::draw_map(oter_id terrain_type, oter_id t_north, oter_id t_east,
 //  integer should be 0, unless the items are "fresh-grown" like wild fruit.
 
  int rn = 0, lw = 0, rw = 0, mw = 0, tw = 0, bw = 0, cw = 0, x = 0, y = 0;
- int n_fac = 0, e_fac = 0, s_fac = 0, w_fac = 0;
+ int n_fac = 0, e_fac = 0, s_fac = 0, w_fac = 0, levs = 0;
  computer *tmpcomp = NULL;
        //int SEEX_oth=SEEX; -- unused
        //int SEEY_oth=SEEY-5; -- unused
@@ -1280,6 +1280,128 @@ void map::draw_map(oter_id terrain_type, oter_id t_north, oter_id t_east,
   if (terrain_type == ot_house_west  || terrain_type == ot_house_base_west)
    rotate(3);
   break;
+
+  case ot_tower_north:
+  case ot_tower_east:
+  case ot_tower_south:
+  case ot_tower_west:
+
+   lw = rng(0, 4);		// left external wall
+   rw = SEEX * 2 - rng(1, 5);	// right external wall
+   mw = ( rw - lw ) / 2 + lw; // left/right divide
+
+   tw = rng(0, 4);		// top external wall
+   bw = SEEX * 2 - rng(1, 5);	// bottom external wall
+   cw = ( bw - tw ) / 2 + tw; // ew divider
+
+   rn = rng(2, 4); // center stair range
+
+   // Level 0
+
+   for (int i = 0; i < SEEX * 2; i++) {
+    for (int j = 0; j < SEEY * 2; j++) {
+     if (i > lw && i < rw && j > tw && j < bw)
+      ter(i, j) = t_floor;
+     else
+      ter(i, j) = grass_or_dirt();
+     if (i >= lw && i <= rw && (j == tw || j == bw))
+      ter(i, j) = t_wall_h;
+     if ((i == lw || i == rw) && j > tw && j < bw)
+      ter(i, j) = t_wall_v;
+    }
+   }
+
+   // Hallway doors and windows
+			ter(mw, tw) = (one_in(6) ? t_door_c : t_door_locked);
+			if (one_in(2)) {
+				ter(mw - 1, tw) = t_window_domestic;
+				ter(mw + 1, tw) = t_window_domestic;
+			}
+
+			for (int i = tw + 1; i < cw - rn; i++) {
+				ter(mw - 2, i) = t_wall_v;
+				ter(mw + 2, i) = t_wall_v;
+			}
+
+   // Stairwell (with hall space)
+			for (int i = cw - rn + 1; i < cw + rn; i++) {
+				ter(mw - rn, i) = t_wall_v;
+				ter(mw + rn, i) = t_wall_v;
+			}
+
+			for (int i = mw - rn; i <= mw + rn; i++) {
+				if (i <= mw - 2 || i >= mw + 2)
+					ter(i, cw - rn) = t_wall_h;
+				ter(i, cw + rn) = t_wall_h;
+			}
+
+			ter(mw + rn, cw + 1) = (one_in(3) ? t_door_c : t_door_locked);
+			ter(mw + rn, cw - 1) = (one_in(3) ? t_door_c : t_door_locked);
+			ter(mw - rn, cw + 1) = (one_in(3) ? t_door_c : t_door_locked);
+			ter(mw - rn, cw - 1) = (one_in(3) ? t_door_c : t_door_locked);
+			ter(mw + 1, cw) = t_stairs_up;
+
+			// TODO: flats rooms
+
+   // other levels - if anyone reads these comments, please forgive me for doing it this way.
+			levs = rng(3, 6); // levels
+   generate_vertical(levs, tw, lw, bw, rw);
+   for (int l = 1; l < levs; ++l) {
+    for (int i = lw; i <= rw; i++) {
+     for (int j = tw; j <= bw; j++) {
+      if (i > lw && i < rw && j > tw && j < bw)
+       ter(i, j, l) = t_floor;
+      if (i >= lw && i <= rw && (j == tw || j == bw))
+       ter(i, j, l) = t_wall_h;
+      if ((i == lw || i == rw) && j > tw && j < bw)
+       ter(i, j, l) = t_wall_v;
+     }
+    }
+
+   	// Stairwell
+				for (int i = cw - rn + 1; i < cw + rn; i++) {
+					ter(mw - rn, i, l) = t_wall_v;
+					ter(mw + rn, i, l) = t_wall_v;
+				}
+
+				for (int i = mw - rn; i <= mw + rn; i++) {
+					ter(i, cw - rn, l) = t_wall_h;
+					ter(i, cw + rn, l) = t_wall_h;
+				}
+
+				ter(mw + rn, cw + 1, l) = (one_in(3) ? t_door_c : t_door_locked);
+				ter(mw + rn, cw - 1, l) = (one_in(3) ? t_door_c : t_door_locked);
+				ter(mw - rn, cw + 1, l) = (one_in(3) ? t_door_c : t_door_locked);
+				ter(mw - rn, cw - 1, l) = (one_in(3) ? t_door_c : t_door_locked);
+
+				ter_id more_up = (l < levs - 1) ? t_stairs_up : t_floor;
+				ter(mw + 1, cw, l) = (l % 2 == 0) ? more_up : t_stairs_down;
+				ter(mw - 1, cw, l) = (l % 2 == 0) ? t_stairs_down : more_up;
+
+				// Outer windows
+				int stb = tw + (bw - tw) / 3;
+				ter(lw, stb, l) = t_window_domestic;
+				ter(lw, stb * 2, l) = t_window_domestic;
+				ter(rw, stb, l) = t_window_domestic;
+				ter(rw, stb * 2, l) = t_window_domestic;
+
+				int slr = lw + (rw - lw) / 3;
+				ter(slr, tw, l) = t_window_domestic;
+				ter(slr * 2, tw, l) = t_window_domestic;
+				ter(slr, bw, l) = t_window_domestic;
+				ter(slr * 2, bw, l) = t_window_domestic;
+
+				// TODO: flat rooms
+   }
+
+   /*if (terrain_type == ot_tower_east)
+    rotate(1);
+   if (terrain_type == ot_tower_south)
+    rotate(2);
+   if (terrain_type == ot_tower_west)
+    rotate(3);
+    */
+   break;
 
  case ot_s_lot:
   for (int i = 0; i < SEEX * 2; i++) {

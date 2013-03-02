@@ -32,6 +32,7 @@ map::map()
   my_MAPSIZE = MAPSIZE;
  dbg(D_INFO) << "map::map(): my_MAPSIZE: " << my_MAPSIZE;
  veh_in_active_range = true;
+ cheap_z = 0;
 }
 
 map::map(std::vector<itype*> *itptr, std::vector<itype_id> (*miptr)[num_itloc],
@@ -51,6 +52,7 @@ map::map(std::vector<itype*> *itptr, std::vector<itype_id> (*miptr)[num_itloc],
  dbg(D_INFO) << "map::map( itptr["<<itptr<<"], miptr["<<miptr<<"], trptr["<<trptr<<"] ): my_MAPSIZE: " << my_MAPSIZE;
  veh_in_active_range = true;
  memset(veh_exists_at, 0, sizeof(veh_exists_at));
+ cheap_z = 0;
 }
 
 map::~map()
@@ -767,19 +769,29 @@ bool map::displace_water (const int x, const int y)
 
 ter_id& map::ter(const int x, const int y)
 {
+	return ter(x, y, cheap_z);
+}
+
+ter_id& map::ter(const int x, const int y, const int z)
+{
  if (!INBOUNDS(x, y)) {
   nulter = t_null;
   return nulter;	// Out-of-bounds - null terrain
  }
-/*
- int nonant;
- cast_to_nonant(x, y, nonant);
-*/
+
  const int nonant = int(x / SEEX) + int(y / SEEY) * my_MAPSIZE;
+ if (z > grid[nonant]->above.size()) {
+  nulter = t_null;
+  return nulter;	// Out-of-bounds - null terrain
+ }
 
  const int lx = x % SEEX;
  const int ly = y % SEEY;
- return grid[nonant]->ter[lx][ly];
+
+ if (z == 0)
+ 	return grid[nonant]->ter[lx][ly];
+
+ return grid[nonant]->above[z - 1]->ter[lx][ly];
 }
 
 bool map::is_indoor(const int x, const int y)
@@ -2555,8 +2567,12 @@ void map::drawsq(WINDOW* w, player &u, const int x, const int y, const bool inve
   tercol = (bright_light) ? c_white : c_ltgreen;
  else if (low_light)
   tercol = c_dkgray;
- else
- {
+ else if (ter(x, y) == t_hole && ter(x, y, 0) != t_hole // either a drop
+ 			|| ter(x, y) == t_null && ter(x, y, 0) != t_null) { // or a map with no z-levels this high
+ 	// TODO: correct find the level to display
+ 	sym = terlist[ter(x, y, 0)].sym;
+ 	tercol = c_dkgray;
+ } else {
   normal_tercol = true;
   tercol = terlist[ter(x, y)].color;
  }
@@ -2897,16 +2913,17 @@ void map::save(overmap *om, unsigned const int turn, const int x, const int y)
 {
  for (int gridx = 0; gridx < my_MAPSIZE; gridx++) {
   for (int gridy = 0; gridy < my_MAPSIZE; gridy++)
-   saven(om, turn, x, y, gridx, gridy);
+   saven(om, turn, x, y, om->posz, gridx, gridy);
  }
 }
 
 void map::load(game *g, const int wx, const int wy, const bool update_vehicle)
 {
+	cheap_z = g->cur_om.posz;
  for (int gridx = 0; gridx < my_MAPSIZE; gridx++) {
   for (int gridy = 0; gridy < my_MAPSIZE; gridy++) {
-   if (!loadn(g, wx, wy, gridx, gridy, update_vehicle))
-    loadn(g, wx, wy, gridx, gridy, update_vehicle);
+   if (!loadn(g, wx, wy, g->cur_om.posz, gridx, gridy, update_vehicle))
+    loadn(g, wx, wy, g->cur_om.posz, gridx, gridy, update_vehicle);
   }
  }
 }
@@ -2918,8 +2935,8 @@ void map::shift(game *g, const int wx, const int wy, const int sx, const int sy)
   return; // Skip this?
   for (int gridx = 0; gridx < my_MAPSIZE; gridx++) {
    for (int gridy = 0; gridy < my_MAPSIZE; gridy++) {
-    if (!loadn(g, wx+sx, wy+sy, gridx, gridy))
-     loadn(g, wx+sx, wy+sy, gridx, gridy);
+    if (!loadn(g, wx+sx, wy+sy, g->cur_om.posz, gridx, gridy))
+     loadn(g, wx+sx, wy+sy, g->cur_om.posz, gridx, gridy);
    }
   }
   return;
@@ -2950,8 +2967,8 @@ void map::shift(game *g, const int wx, const int wy, const int sx, const int sy)
       copy_grid(gridx + gridy * my_MAPSIZE,
                 gridx + sx + (gridy + sy) * my_MAPSIZE);
       update_vehicle_list(gridx + gridy * my_MAPSIZE);
-     } else if (!loadn(g, wx + sx, wy + sy, gridx, gridy))
-      loadn(g, wx + sx, wy + sy, gridx, gridy);
+     } else if (!loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy))
+      loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy);
     }
    } else { // sy < 0; work through it backwards
     for (int gridy = my_MAPSIZE - 1; gridy >= 0; gridy--) {
@@ -2964,8 +2981,8 @@ void map::shift(game *g, const int wx, const int wy, const int sx, const int sy)
       copy_grid(gridx + gridy * my_MAPSIZE,
                 gridx + sx + (gridy + sy) * my_MAPSIZE);
       update_vehicle_list(gridx + gridy * my_MAPSIZE);
-     } else if (!loadn(g, wx + sx, wy + sy, gridx, gridy))
-      loadn(g, wx + sx, wy + sy, gridx, gridy);
+     } else if (!loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy))
+      loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy);
     }
    }
   }
@@ -2982,8 +2999,8 @@ void map::shift(game *g, const int wx, const int wy, const int sx, const int sy)
       copy_grid(gridx + gridy * my_MAPSIZE,
                 gridx + sx + (gridy + sy) * my_MAPSIZE);
       update_vehicle_list(gridx + gridy * my_MAPSIZE);
-     } else if (!loadn(g, wx + sx, wy + sy, gridx, gridy))
-      loadn(g, wx + sx, wy + sy, gridx, gridy);
+     } else if (!loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy))
+      loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy);
     }
    } else { // sy < 0; work through it backwards
     for (int gridy = my_MAPSIZE - 1; gridy >= 0; gridy--) {
@@ -2996,8 +3013,8 @@ void map::shift(game *g, const int wx, const int wy, const int sx, const int sy)
       copy_grid(gridx + gridy * my_MAPSIZE,
                 gridx + sx + (gridy + sy) * my_MAPSIZE);
       update_vehicle_list(gridx + gridy * my_MAPSIZE);
-     } else if (!loadn(g, wx + sx, wy + sy, gridx, gridy))
-      loadn(g, wx + sx, wy + sy, gridx, gridy);
+     } else if (!loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy))
+      loadn(g, wx + sx, wy + sy, g->cur_om.posz, gridx, gridy);
     }
    }
   }
@@ -3012,7 +3029,7 @@ void map::shift(game *g, const int wx, const int wy, const int sx, const int sy)
 // 0,1 1,1 2,1
 // 0,2 1,2 2,2
 void map::saven(overmap *om, unsigned const int turn, const int worldx, const int worldy,
-                const int gridx, const int gridy)
+		              const int worldz, const int gridx, const int gridy)
 {
  dbg(D_INFO) << "map::saven(om[" << (void*)om << "], turn[" << turn <<"], worldx["<<worldx<<"], worldy["<<worldy<<"], gridx["<<gridx<<"], gridy["<<gridy<<"])";
 
@@ -3025,12 +3042,17 @@ void map::saven(overmap *om, unsigned const int turn, const int worldx, const in
   dbg(D_ERROR) << "map::saven grid NULL!";
   return;
  }
+
  const int abs_x = om->posx * OMAPX * 2 + worldx + gridx,
-           abs_y = om->posy * OMAPY * 2 + worldy + gridy;
+           abs_y = om->posy * OMAPY * 2 + worldy + gridy,
+	          abs_z = worldz;
 
- dbg(D_INFO) << "map::saven abs_x: " << abs_x << "  abs_y: " << abs_y;
+ dbg(D_INFO) << "map::saven abs_x: " << abs_x << "  abs_y: " << abs_y << " abs_z: " << abs_z;
 
- MAPBUFFER.add_submap(abs_x, abs_y, om->posz, grid[n]);
+ MAPBUFFER.add_submap(abs_x, abs_y, abs_z, grid[n]);
+ for(size_t i = 0; i < grid[n]->above.size(); ++i) {
+ 	MAPBUFFER.add_submap(abs_x, abs_y, abs_z + i + 1, grid[n]->above[i]);
+ }
 }
 
 // worldx & worldy specify where in the world this is;
@@ -3038,19 +3060,21 @@ void map::saven(overmap *om, unsigned const int turn, const int worldx, const in
 // 0,0  1,0  2,0
 // 0,1  1,1  2,1
 // 0,2  1,2  2,2 etc
-bool map::loadn(game *g, const int worldx, const int worldy, const int gridx, const int gridy,
+bool map::loadn(game *g, const int worldx, const int worldy, const int worldz, const int gridx, const int gridy,
                 const bool update_vehicles)
 {
  dbg(D_INFO) << "map::loadn(game[" << g << "], worldx["<<worldx<<"], worldy["<<worldy<<"], gridx["<<gridx<<"], gridy["<<gridy<<"])";
 
  const int absx = g->cur_om.posx * OMAPX * 2 + worldx + gridx,
            absy = g->cur_om.posy * OMAPY * 2 + worldy + gridy,
+     // Hack for z-level stuff
+           absz = (worldz <= 0 && worldz >= TUTORIAL_Z - 1) ? worldz : 0,
            gridn = gridx + gridy * my_MAPSIZE;
 
- dbg(D_INFO) << "map::loadn absx: " << absx << "  absy: " << absy
+ dbg(D_INFO) << "map::loadn absx: " << absx << "  absy: " << absy << " absz: " << absz
             << "  gridn: " << gridn;
 
- submap *tmpsub = MAPBUFFER.lookup_submap(absx, absy, g->cur_om.posz);
+ submap *tmpsub = MAPBUFFER.lookup_submap(absx, absy, absz);
  if (tmpsub) {
   grid[gridn] = tmpsub;
 
@@ -3205,6 +3229,39 @@ graffiti map::graffiti_at(int x, int y)
  return grid[nonant]->graf[x][y];
 }
 
+void map::generate_vertical(int levs, int t, int l, int b, int r)
+{
+	// increase bounds by one just to make sure whatever is used has a layer of holes around it
+	int sx = (l - 1) / SEEX, ex = (r + 1) / SEEX;
+	int sy = (t - 1) / SEEY, ey = (b + 1) / SEEY;
+
+	--levs; // bottom lev is this submap
+	for (int x = sx; x <= ex; ++x) {
+		for (int y = sy; y <= ey; ++y) {
+			int nonant = x + y * my_MAPSIZE;
+			if (grid[nonant]->above.size() < levs) {
+				int from = grid[nonant]->above.size();
+				for(int l = from; l < levs; ++l) {
+			  submap *blankslate = new submap();
+			  blankslate->active_item_count = 0;
+			  blankslate->field_count = 0;
+			  blankslate->turn_last_touched = grid[nonant]->turn_last_touched;
+			  blankslate->comp = computer();
+			  for (int x = 0; x < SEEX; x++) {
+			   for (int y = 0; y < SEEY; y++) {
+			   	blankslate->ter[x][y] = t_hole;
+			    blankslate->trp[x][y] = tr_null;
+			    blankslate->fld[x][y] = field();
+			    blankslate->rad[x][y] = 0;
+			    blankslate->graf[x][y] = graffiti();
+			   }
+			  }
+			  grid[nonant]->above.push_back(blankslate);
+				}
+			}
+		}
+	}
+}
 
 tinymap::tinymap()
 {
